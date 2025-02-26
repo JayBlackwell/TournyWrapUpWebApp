@@ -3,10 +3,17 @@ import requests
 import openai
 import google.generativeai as genai
 import json
+import base64
+from pathlib import Path
+
+# Function to load and encode local image files
+def get_image_base64(image_path):
+    with open(image_path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode()
 
 st.set_page_config(
     page_title="Golf Tournament Recap Generator",
-    page_icon="⛳",
+    page_icon="solsticelogo.ico",  # Changed to use local icon file
     layout="wide",
 )
 
@@ -29,11 +36,46 @@ st.markdown("""
     h1, h2, h3 {
         color: #333333;
     }
+    /* Column divider */
+    [data-testid="column"]:first-child {
+        border-right: 1px solid #ddd;
+        padding-right: 2rem;
+    }
+    [data-testid="column"]:nth-child(2) {
+        padding-left: 2rem;
+    }
+    /* Fixed width for selectboxes */
+    .stSelectbox div[data-baseweb="select"] {
+        max-width: 400px !important;
+    }
+    /* Fix for the dropdown arrow positioning */
+    .stSelectbox [data-testid="stWidgetLabel"] ~ div div[role="combobox"] div:last-child {
+        right: 0 !important;
+        position: absolute !important;
+    }
+    /* Container style adjustments */
+    div[data-testid="stVerticalBlock"] > div[style] {
+        max-width: 100% !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# Title
-st.title("⛳ Golf Tournament Recap Generator")
+# Try to load the local icon file
+try:
+    # Path to your local .ico file
+    logo_path = "solsticelogo.ico"
+    logo_base64 = get_image_base64(logo_path)
+    logo_html = f"""
+    <div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
+        <img src="data:image/x-icon;base64,{logo_base64}" width="50" style="margin-right: 10px;">
+        <h1 style="margin: 0;">Golf Tournament Recap Generator</h1>
+    </div>
+    """
+    st.markdown(logo_html, unsafe_allow_html=True)
+except Exception as e:
+    # Fallback to simple title if image loading fails
+    st.title("🏆 Golf Tournament Recap Generator")
+
 st.markdown("Generate professional tournament recaps using AI")
 
 # Initialize session state for storing selections
@@ -54,10 +96,10 @@ if 'selections_made' not in st.session_state:
 if 'seasonal_data' not in st.session_state:
     st.session_state.seasonal_data = {}
 
-# Create tabs for setup and results
-tab1, tab2 = st.tabs(["Setup", "Results"])
+# Create two columns for the layout with adjusted width ratio and gap
+col1, col2 = st.columns([1, 1], gap="large")
 
-with tab1:
+with col1:
     # API Settings
     st.header("API Settings")
     
@@ -142,109 +184,116 @@ with tab1:
             st.error(f"Error fetching tournament results: {e}")
             return None
 
-    # Data Selection Section
+    # Tournament Selection Section - with container to limit width
     st.header("Tournament Selection")
     
-    # Fetching seasons
-    if st.button("Fetch Seasons") and golf_api_key:
-        with st.spinner("Fetching seasons..."):
-            seasons = get_seasons(golf_api_key)
-            if seasons:
-                season_options = {}
-                for item in seasons:
-                    season = item["season"]
-                    name = season.get("name", "No Name Available")
-                    season_id = season.get("id")
-                    season_options[name] = season_id
-                st.session_state.seasonal_data['seasons'] = season_options
-                st.success("Seasons fetched successfully!")
-            else:
-                st.error("Failed to fetch seasons.")
+    with st.container():
+        # Fetching seasons
+        if st.button("Fetch Seasons", key="fetch_seasons_btn", use_container_width=False):
+            if golf_api_key:
+                with st.spinner("Fetching seasons..."):
+                    seasons = get_seasons(golf_api_key)
+                    if seasons:
+                        season_options = {}
+                        for item in seasons:
+                            season = item["season"]
+                            name = season.get("name", "No Name Available")
+                            season_id = season.get("id")
+                            season_options[name] = season_id
+                        st.session_state.seasonal_data['seasons'] = season_options
+                        st.success("Seasons fetched successfully!")
+                    else:
+                        st.error("Failed to fetch seasons.")
     
-    # Season selection dropdown
-    if 'seasons' in st.session_state.seasonal_data:
-        season_name = st.selectbox(
-            "Select Season:",
-            options=list(st.session_state.seasonal_data['seasons'].keys()),
-            key="season_selector"
-        )
-        st.session_state.selected_season = st.session_state.seasonal_data['seasons'][season_name]
+        # Season selection dropdown
+        if 'seasons' in st.session_state.seasonal_data:
+            season_name = st.selectbox(
+                "Select Season:",
+                options=list(st.session_state.seasonal_data['seasons'].keys()),
+                key="season_selector",
+                # Increase width of dropdown
+                help="Select a season from the list"
+            )
+            st.session_state.selected_season = st.session_state.seasonal_data['seasons'][season_name]
+            
+            # Fetch events for selected season
+            if st.button("Fetch Events", key="fetch_events_btn", use_container_width=False) and st.session_state.selected_season:
+                with st.spinner("Fetching events..."):
+                    events = get_events(golf_api_key, st.session_state.selected_season)
+                    if events:
+                        event_options = {}
+                        for item in events:
+                            event = item["event"]
+                            name = event.get("name", "No Name Available")
+                            event_id = event.get("id")
+                            event_options[name] = event_id
+                        st.session_state.seasonal_data['events'] = event_options
+                        st.success("Events fetched successfully!")
+                    else:
+                        st.error("Failed to fetch events.")
         
-        # Fetch events for selected season
-        if st.button("Fetch Events") and st.session_state.selected_season:
-            with st.spinner("Fetching events..."):
-                events = get_events(golf_api_key, st.session_state.selected_season)
-                if events:
-                    event_options = {}
-                    for item in events:
-                        event = item["event"]
-                        name = event.get("name", "No Name Available")
-                        event_id = event.get("id")
-                        event_options[name] = event_id
-                    st.session_state.seasonal_data['events'] = event_options
-                    st.success("Events fetched successfully!")
-                else:
-                    st.error("Failed to fetch events.")
-    
-    # Event selection dropdown
-    if 'events' in st.session_state.seasonal_data:
-        event_name = st.selectbox(
-            "Select Event:",
-            options=list(st.session_state.seasonal_data['events'].keys()),
-            key="event_selector"
-        )
-        st.session_state.selected_event = st.session_state.seasonal_data['events'][event_name]
+        # Event selection dropdown
+        if 'events' in st.session_state.seasonal_data:
+            event_name = st.selectbox(
+                "Select Event:",
+                options=list(st.session_state.seasonal_data['events'].keys()),
+                key="event_selector",
+                help="Select an event from the list"
+            )
+            st.session_state.selected_event = st.session_state.seasonal_data['events'][event_name]
+            
+            # Fetch rounds for selected event
+            if st.button("Fetch Rounds", key="fetch_rounds_btn", use_container_width=False) and st.session_state.selected_event:
+                with st.spinner("Fetching rounds..."):
+                    rounds = get_rounds(golf_api_key, st.session_state.selected_event)
+                    if rounds:
+                        round_options = {}
+                        for item in rounds:
+                            round_data = item["round"]
+                            name = round_data.get("name", "No Name Available")
+                            round_id = round_data.get("id")
+                            round_options[name] = round_id
+                        st.session_state.seasonal_data['rounds'] = round_options
+                        st.success("Rounds fetched successfully!")
+                    else:
+                        st.error("Failed to fetch rounds.")
         
-        # Fetch rounds for selected event
-        if st.button("Fetch Rounds") and st.session_state.selected_event:
-            with st.spinner("Fetching rounds..."):
-                rounds = get_rounds(golf_api_key, st.session_state.selected_event)
-                if rounds:
-                    round_options = {}
-                    for item in rounds:
-                        round_data = item["round"]
-                        name = round_data.get("name", "No Name Available")
-                        round_id = round_data.get("id")
-                        round_options[name] = round_id
-                    st.session_state.seasonal_data['rounds'] = round_options
-                    st.success("Rounds fetched successfully!")
-                else:
-                    st.error("Failed to fetch rounds.")
-    
-    # Round selection dropdown
-    if 'rounds' in st.session_state.seasonal_data:
-        round_name = st.selectbox(
-            "Select Round:",
-            options=list(st.session_state.seasonal_data['rounds'].keys()),
-            key="round_selector"
-        )
-        st.session_state.selected_round = st.session_state.seasonal_data['rounds'][round_name]
+        # Round selection dropdown
+        if 'rounds' in st.session_state.seasonal_data:
+            round_name = st.selectbox(
+                "Select Round:",
+                options=list(st.session_state.seasonal_data['rounds'].keys()),
+                key="round_selector",
+                help="Select a round from the list"
+            )
+            st.session_state.selected_round = st.session_state.seasonal_data['rounds'][round_name]
+            
+            # Fetch tournaments for selected round
+            if st.button("Fetch Tournaments", key="fetch_tournaments_btn", use_container_width=False) and st.session_state.selected_round:
+                with st.spinner("Fetching tournaments..."):
+                    tournaments = get_tournaments(golf_api_key, st.session_state.selected_event, st.session_state.selected_round)
+                    if tournaments:
+                        tournament_options = {}
+                        for item in tournaments:
+                            tournament = item["event"]
+                            name = tournament.get("name", "No Name Available")
+                            tournament_id = tournament.get("id")
+                            tournament_options[name] = tournament_id
+                        st.session_state.seasonal_data['tournaments'] = tournament_options
+                        st.success("Tournaments fetched successfully!")
+                    else:
+                        st.error("Failed to fetch tournaments.")
         
-        # Fetch tournaments for selected round
-        if st.button("Fetch Tournaments") and st.session_state.selected_round:
-            with st.spinner("Fetching tournaments..."):
-                tournaments = get_tournaments(golf_api_key, st.session_state.selected_event, st.session_state.selected_round)
-                if tournaments:
-                    tournament_options = {}
-                    for item in tournaments:
-                        tournament = item["event"]
-                        name = tournament.get("name", "No Name Available")
-                        tournament_id = tournament.get("id")
-                        tournament_options[name] = tournament_id
-                    st.session_state.seasonal_data['tournaments'] = tournament_options
-                    st.success("Tournaments fetched successfully!")
-                else:
-                    st.error("Failed to fetch tournaments.")
-    
-    # Tournament selection dropdown
-    if 'tournaments' in st.session_state.seasonal_data:
-        tournament_name = st.selectbox(
-            "Select Tournament:",
-            options=list(st.session_state.seasonal_data['tournaments'].keys()),
-            key="tournament_selector"
-        )
-        st.session_state.selected_tournament = st.session_state.seasonal_data['tournaments'][tournament_name]
-        st.session_state.selections_made = True
+        # Tournament selection dropdown
+        if 'tournaments' in st.session_state.seasonal_data:
+            tournament_name = st.selectbox(
+                "Select Tournament:",
+                options=list(st.session_state.seasonal_data['tournaments'].keys()),
+                key="tournament_selector",
+                help="Select a tournament from the list"
+            )
+            st.session_state.selected_tournament = st.session_state.seasonal_data['tournaments'][tournament_name]
+            st.session_state.selections_made = True
 
 # Process tournament data and generate recap
 def parse_json_results(json_data):
@@ -296,8 +345,12 @@ def get_llm_response(llm_api_key, json_data, score_type, llm_choice):
     try:
         if llm_choice == "OpenAI":
             client = openai.OpenAI(api_key=llm_api_key)
-            template = "Golf recap: {}. Intro, Players, Conclusion."
-            sys_msg = template.format(score_type)
+            sys_msg = (
+                f"You are a Pulitzer Prize-winning sports writer tasked with crafting a compelling and professional wrap-up for a golf tournament. "
+                f"Analyze the Data: Use only the provided player data (rank, name, score, total gross, gross_scores, net_scores). "
+                f"Focus on 'total' and 'score' for overall performance. For standout holes, use '{score_type}_scores' to identify one notable hole per team. "
+                "Schema: Introduction, Individual Highlights (top 3), Conclusion."
+            )
 
             response = client.chat.completions.create(
                 model="gpt-4o",
@@ -314,8 +367,14 @@ def get_llm_response(llm_api_key, json_data, score_type, llm_choice):
         elif llm_choice == "Google Gemini":
             genai.configure(api_key=llm_api_key)
             model = genai.GenerativeModel("gemini-1.5-flash")
-            template = "Golf recap: {}. Intro, Players, Conclusion.\n\n"
-            prompt = template.format(score_type) + message
+            sys_msg = (
+                f"You are a Pulitzer Prize-winning sports writer tasked with crafting a compelling and professional wrap-up for a golf tournament. "
+                f"Analyze the Data: Use only the provided player data (rank, name, score, total gross, gross_scores, net_scores). "
+                f"Focus on 'total' and 'score' for overall performance. For standout holes, use '{score_type}_scores' to identify one notable hole per team. "
+                "Schema: Introduction, Individual Highlights (top 3), Conclusion."
+            )
+            
+            prompt = sys_msg + "\n\n" + message
 
             response = model.generate_content(prompt)
             content = response.text
@@ -325,38 +384,40 @@ def get_llm_response(llm_api_key, json_data, score_type, llm_choice):
         st.error(f"Error getting {llm_choice} response: {str(e)}")
         return None
 
-# Generate button in main area
+# Generate button at the bottom of the first column
 if st.session_state.selections_made:
-    if st.button("Generate Tournament Recap"):
-        if not golf_api_key or not llm_api_key:
-            st.error("Please enter all required API keys.")
-        else:
-            with st.spinner("Fetching tournament results..."):
-                results = get_tournament_results(
-                    golf_api_key, 
-                    st.session_state.selected_event, 
-                    st.session_state.selected_round, 
-                    st.session_state.selected_tournament
-                )
-                
-                if results:
-                    st.session_state.tournament_results = results
-                    with st.spinner("Generating recap..."):
-                        recap = get_llm_response(
-                            llm_api_key, 
-                            results, 
-                            score_type, 
-                            llm_choice
-                        )
-                        
-                        if recap:
-                            st.session_state.recap = recap
-                            st.success("Recap generated successfully!")
-                else:
-                    st.error("Failed to fetch tournament results.")
+    with col1:
+        st.markdown("---")
+        if st.button("Generate Tournament Recap", key="generate_recap_btn", use_container_width=True):
+            if not golf_api_key or not llm_api_key:
+                st.error("Please enter all required API keys.")
+            else:
+                with st.spinner("Fetching tournament results..."):
+                    results = get_tournament_results(
+                        golf_api_key, 
+                        st.session_state.selected_event, 
+                        st.session_state.selected_round, 
+                        st.session_state.selected_tournament
+                    )
+                    
+                    if results:
+                        st.session_state.tournament_results = results
+                        with st.spinner("Generating recap..."):
+                            recap = get_llm_response(
+                                llm_api_key, 
+                                results, 
+                                score_type, 
+                                llm_choice
+                            )
+                            
+                            if recap:
+                                st.session_state.recap = recap
+                                st.success("Recap generated successfully!")
+                    else:
+                        st.error("Failed to fetch tournament results.")
 
-# Results tab
-with tab2:
+# Results section in second column
+with col2:
     st.header("Tournament Recap")
     
     if st.session_state.recap:
