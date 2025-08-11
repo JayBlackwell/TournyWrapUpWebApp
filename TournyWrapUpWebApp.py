@@ -353,7 +353,7 @@ def get_llm_response(llm_api_key, json_data, score_type, llm_choice):
             )
 
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="o3-mini",
                 messages=[
                     {"role": "system", "content": sys_msg},
                     {"role": "user", "content": message},
@@ -366,7 +366,7 @@ def get_llm_response(llm_api_key, json_data, score_type, llm_choice):
             content = response.choices[0].message.content
         elif llm_choice == "Google Gemini":
             genai.configure(api_key=llm_api_key)
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            model = genai.GenerativeModel("gemini-2.5-flash")
             sys_msg = (
                 f"You are a Pulitzer Prize-winning sports writer tasked with crafting a compelling and professional wrap-up for a golf tournament. "
                 f"Analyze the Data: Use only the provided player data (rank, name, score, total gross, gross_scores, net_scores). "
