@@ -353,7 +353,7 @@ def get_llm_response(llm_api_key, json_data, score_type, llm_choice):
             )
 
             response = client.chat.completions.create(
-                model="o3-mini",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": sys_msg},
                     {"role": "user", "content": message},
